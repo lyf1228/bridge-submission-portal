@@ -221,6 +221,35 @@ html, body, .stApp { font-size: 17px; }
     margin-bottom: 0.4rem;
 }
 
+/* 檔案上傳區：拉寬按鈕、文字不擠、隱藏未載入的圖示 ligature */
+[data-testid="stFileUploader"] section,
+[data-testid="stFileUploaderDropzone"] {
+    padding: 1rem 1.2rem;
+    border-radius: 12px;
+    align-items: center;
+    gap: 1rem;
+}
+[data-testid="stFileUploader"] button,
+[data-testid="stFileUploaderDropzone"] button {
+    min-width: 150px;
+    white-space: nowrap;
+    padding: 0.5rem 1.4rem !important;
+    font-size: 1rem !important;
+    background: linear-gradient(135deg, var(--maple-red-1) 0%, var(--amber-gold) 130%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    letter-spacing: normal !important;
+}
+/* Google Material Symbols 沒載入時會顯示 "upload" 等文字，藏起來 */
+[data-testid="stFileUploaderDropzone"] [data-testid="stFileUploaderDropzoneInstructions"] span:first-child {
+    flex: 0 0 auto;
+}
+[data-testid="stFileUploader"] .material-symbols-rounded,
+[data-testid="stFileUploader"] [class*="material-symbols"] {
+    font-size: 0 !important;
+}
+
 /* 輸入元件外觀 */
 .stTextInput input, .stTextArea textarea, .stNumberInput input, .stSelectbox div[data-baseweb="select"] {
     border-radius: 10px !important;
