@@ -216,7 +216,7 @@ streamlit run app.py
 
 ```
 bridge-submission-portal/
-├── app.py                        # 主程式：表單 + 後台 + 檔案解析 + 楓葉時計 CSS/SVG
+├── app.py                        # 主程式：表單 + 後台 + 檔案解析 + 秋日紅楓 CSS
 ├── storage.py                    # Google Sheets 後端（gspread）
 ├── gdrive.py                     # Google Drive 後端（POST 給 Apps Script）
 ├── mailer.py                     # Gmail SMTP 投稿通知信
