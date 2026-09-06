@@ -825,7 +825,7 @@ def main() -> None:
 
     st.markdown(
         '<hr/><div style="text-align:center;color:#9a8574;font-size:0.82rem;">'
-        "中橋季刊編輯部 · Bridge Magazine Portal &nbsp;—&nbsp; 秋日紅楓 × 和風時計"
+        "中橋季刊編輯部 · Bridge Magazine Portal &nbsp;—&nbsp; Designed &amp; Developed by LuLu"
         "</div>",
         unsafe_allow_html=True,
     )
