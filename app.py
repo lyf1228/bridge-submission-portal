@@ -127,17 +127,12 @@ html, body, .stApp { font-size: 17px; }
     font-size: 1.06rem !important;
 }
 
-/* 頂部裝飾橫幅：秋風紅楓 + 和風時計輪廓 */
+/* 頂部橫幅：簡潔米白，只有標題旁一朵楓葉 */
 .mp-header {
-    position: relative;
     margin: -1rem -1rem 1.6rem -1rem;
-    padding: 2.1rem 1.4rem 1.7rem 1.4rem;
-    background:
-        radial-gradient(circle at 12% 20%, rgba(212,163,115,0.22), transparent 45%),
-        radial-gradient(circle at 88% 12%, rgba(186,24,27,0.16), transparent 42%),
-        linear-gradient(135deg, #fdfbf8 0%, #f6efe6 100%);
+    padding: 2rem 1.4rem 1.5rem 1.4rem;
+    background: linear-gradient(135deg, #fdfbf8 0%, #f6efe6 100%);
     border-bottom: 2px solid var(--amber-gold);
-    overflow: hidden;
 }
 .mp-header h1 {
     margin: 0;
@@ -149,13 +144,6 @@ html, body, .stApp { font-size: 17px; }
     font-size: 0.95rem;
     color: #6f5b4e;
     letter-spacing: 0.14em;
-}
-.mp-deco {
-    position: absolute;
-    top: 0; right: 0;
-    width: 210px; height: 100%;
-    pointer-events: none;
-    opacity: 0.9;
 }
 .mp-leaf-strip {
     margin-top: 1rem;
@@ -245,35 +233,10 @@ hr { border-color: rgba(212,163,115,0.5); }
 </style>
 """
 
-# 頂部 SVG 裝飾：紅楓葉 + 和風指針鐘面輪廓
+# 頂部橫幅：只保留標題旁一朵楓葉，不再放時鐘與散落葉片
 HEADER_HTML = f"""
 {CUSTOM_CSS}
 <div class="mp-header">
-  <svg class="mp-deco" viewBox="0 0 210 150" xmlns="http://www.w3.org/2000/svg">
-    <!-- 和風時計鐘面 -->
-    <g transform="translate(150,42)" fill="none" stroke="#9E2A2B" stroke-width="2.2" opacity="0.75">
-      <circle r="30"/>
-      <circle r="25" stroke="#D4A373" stroke-width="1"/>
-      <line x1="0" y1="0" x2="0" y2="-19" stroke="#BA181B" stroke-width="2.6"/>
-      <line x1="0" y1="0" x2="13" y2="7" stroke="#BA181B" stroke-width="2.6"/>
-      <circle r="2.4" fill="#BA181B" stroke="none"/>
-      <line x1="0" y1="-30" x2="0" y2="-25"/>
-      <line x1="30" y1="0" x2="25" y2="0"/>
-      <line x1="0" y1="30" x2="0" y2="25"/>
-      <line x1="-30" y1="0" x2="-25" y2="0"/>
-    </g>
-    <!-- 秋風紅楓葉 -->
-    <g transform="translate(52,86)" fill="#BA181B" opacity="0.85">
-      <path d="M0,-26 L6,-9 L22,-14 L11,-1 L26,6 L9,7 L14,24 L0,12 L-14,24 L-9,7 L-26,6 L-11,-1 L-22,-14 L-6,-9 Z"/>
-      <rect x="-1.4" y="10" width="2.8" height="14" rx="1"/>
-    </g>
-    <g transform="translate(96,120) scale(0.55)" fill="#D4A373" opacity="0.8">
-      <path d="M0,-26 L6,-9 L22,-14 L11,-1 L26,6 L9,7 L14,24 L0,12 L-14,24 L-9,7 L-26,6 L-11,-1 L-22,-14 L-6,-9 Z"/>
-    </g>
-    <g transform="translate(20,34) scale(0.42)" fill="#9E2A2B" opacity="0.7">
-      <path d="M0,-26 L6,-9 L22,-14 L11,-1 L26,6 L9,7 L14,24 L0,12 L-14,24 L-9,7 L-26,6 L-11,-1 L-22,-14 L-6,-9 Z"/>
-    </g>
-  </svg>
   <h1>🍁 中橋季刊 · 線上投稿與審稿系統</h1>
   <div class="mp-sub">B R I D G E &nbsp; M A G A Z I N E &nbsp; P O R T A L &nbsp;— &nbsp;光陰流轉 · 季刊編採</div>
   <div class="mp-leaf-strip"></div>
