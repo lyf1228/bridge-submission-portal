@@ -1,0 +1,23 @@
+# 投稿資料（含讀者個資與原始檔），不進版控
+submissions/
+
+# Streamlit secrets（服務帳戶金鑰！）— 只保留範例檔
+.streamlit/secrets.toml
+
+# 個人設定值備份 / 任何 *.local.* 檔
+*.local.md
+*.local.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / 編輯器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
