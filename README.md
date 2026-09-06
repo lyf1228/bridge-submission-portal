@@ -1,6 +1,6 @@
 # 🍁 中橋季刊 · 線上投稿與後台審稿系統
 
-**Bridge Magazine Portal** — 秋日紅楓 × 和風時計主題的 Streamlit 網站，
+**Bridge Magazine Portal** — 秋日紅楓風格的 Streamlit 網站，
 一套系統同時做兩件事：
 
 | 對象 | 用途 |
