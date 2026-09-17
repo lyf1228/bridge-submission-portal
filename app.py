@@ -25,6 +25,7 @@ from PIL import Image
 
 import gdrive
 import mailer
+import proofreader
 import storage
 
 # --------------------------------------------------------------------------- #
@@ -286,9 +287,9 @@ def _html_escape(text: str) -> str:
     )
 
 
-def drive_folder_name(name: str, title: str) -> str:
-    """Google Drive 子資料夾名稱：投稿者姓名＿文章標題（去掉不合法字元）。"""
-    raw = f"{name.strip()}＿{title.strip()}"
+def drive_folder_name(name: str, title: str, prefix: str = "") -> str:
+    """Google Drive 子資料夾名稱：（可選前綴）投稿者姓名＿文章標題（去掉不合法字元）。"""
+    raw = f"{prefix}{name.strip()}＿{title.strip()}"
     raw = re.sub(r'[\\/:*?"<>|]', "", raw)      # Drive／作業系統禁用字元
     raw = re.sub(r"\s+", " ", raw).strip(" ＿_")
     return raw[:120] or "未命名投稿"
@@ -367,6 +368,49 @@ def build_zip(folder: Path) -> bytes:
                 zf.write(path, arcname=path.relative_to(folder))
     buffer.seek(0)
     return buffer.read()
+
+
+def run_ai_proofread_and_store(
+    name: str, title: str, metadata: dict, proof: dict, local_dir: Path | None = None
+) -> str:
+    """
+    把 AI 校對結果（校對後全文 + 修訂對照表 docx）寫到本機（若有給 local_dir）
+    並上傳到 Drive 的「（AI校正）姓名＿標題」子資料夾。回傳該 Drive 資料夾網址（可能為空字串）。
+    """
+    if local_dir is not None:
+        (local_dir / "AI校對後內文.txt").write_text(proof["corrected_text"], encoding="utf-8")
+
+    try:
+        revision_docx = proofreader.build_revision_docx(metadata, proof)
+    except Exception:  # noqa: BLE001 - 產生對照表失敗不應中斷流程
+        revision_docx = None
+    if revision_docx and local_dir is not None:
+        (local_dir / "AI修訂對照表.docx").write_bytes(revision_docx)
+
+    if not gdrive.is_enabled():
+        return ""
+
+    ai_subfolder = drive_folder_name(name, title, prefix="（AI校正）")
+    ai_files = [
+        {
+            "filename": "AI校對後內文.txt",
+            "data": proof["corrected_text"].encode("utf-8"),
+            "mime": "text/plain",
+        },
+        {
+            "filename": "metadata.json",
+            "data": json.dumps(metadata, ensure_ascii=False, indent=2).encode("utf-8"),
+            "mime": "application/json",
+        },
+    ]
+    if revision_docx:
+        ai_files.insert(1, {
+            "filename": "AI修訂對照表.docx",
+            "data": revision_docx,
+            "mime": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        })
+    ai_up = gdrive.upload_files(ai_subfolder, ai_files)
+    return ai_up["folder_url"] if ai_up and ai_up.get("folder_url") else ""
 
 
 # --------------------------------------------------------------------------- #
@@ -583,6 +627,23 @@ def render_submission_form() -> None:
                 metadata["drive_folder_url"] = up["folder_url"]
                 drive_ok = True
 
+        # AI 智慧校對（靜默背景執行，投稿者完全無感；任何失敗都不影響投稿本身）
+        metadata["ai_status"] = ""
+        metadata["ai_corrected_content"] = ""
+        metadata["ai_revisions"] = []
+        metadata["ai_folder_url"] = ""
+        if proofreader.is_enabled():
+            proof = proofreader.proofread(metadata["content"], metadata["title"], metadata["category"])
+            if proof:
+                metadata["ai_status"] = "已完成"
+                metadata["ai_corrected_content"] = proof["corrected_text"]
+                metadata["ai_revisions"] = proof["revisions"]
+                metadata["ai_folder_url"] = run_ai_proofread_and_store(
+                    name, title, metadata, proof, local_dir=folder
+                )
+            else:
+                metadata["ai_status"] = "失敗"
+
         (folder / "metadata.json").write_text(
             json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -638,6 +699,7 @@ def render_admin_login() -> None:
         st.sidebar.caption(f"Google Drive：{gdrive.status_text()}")
         st.sidebar.caption(f"Google Sheets：{storage.status_text()}")
         st.sidebar.caption(f"投稿通知信：{mailer.status_text()}")
+        st.sidebar.caption(f"AI 校對：{proofreader.status_text()}")
         if st.sidebar.button("登出"):
             st.session_state["is_admin"] = False
             st.rerun()
@@ -670,9 +732,8 @@ def render_admin_login() -> None:
             st.sidebar.error("帳號或密碼錯誤")
 
 
-def render_admin_panel() -> None:
-    st.subheader("🗂️ 後台審稿管理總覽")
-
+def _load_all_submissions() -> tuple[list[dict], str]:
+    """合併 Google Sheets（若已設定）與本機 submissions/，回傳 (清單, 資料來源說明)。"""
     google_on = storage.is_enabled()
     if google_on:
         subs = storage.read_submissions()
@@ -684,9 +745,16 @@ def render_admin_panel() -> None:
     else:
         subs = list_submissions()
         src = "本機 submissions/ 資料夾"
+    return subs, src
+
+
+def render_admin_panel() -> None:
+    st.subheader("🗂️ 後台審稿管理總覽")
+
+    subs, src = _load_all_submissions()
     st.caption(f"資料來源：{src}")
 
-    if google_on and st.button("🔄 重新連線 / 重新整理"):
+    if storage.is_enabled() and st.button("🔄 重新連線 / 重新整理"):
         storage.refresh()
         st.rerun()
 
@@ -809,6 +877,118 @@ def render_admin_panel() -> None:
                 st.caption(f"原始文檔：{s['original_document']}（存於投稿者本機提交紀錄）")
 
 
+def render_ai_review_panel() -> None:
+    st.subheader("🤖 AI 校對與審稿")
+    st.caption(
+        "新投稿送出後，系統已在背景自動用 AI 校對一次（投稿者不會看到這個過程）。"
+        "這裡可以檢視校對結果、直接修改定稿，確認後一鍵寄給投稿者。"
+    )
+    if not proofreader.is_enabled():
+        st.info("尚未設定 Claude API 金鑰（secrets 的 `[anthropic]`），AI 校對功能目前關閉。")
+
+    subs, src = _load_all_submissions()
+    st.caption(f"資料來源：{src}")
+    if not subs:
+        st.info("目前尚無任何投稿。")
+        return
+
+    def _label(i: int) -> str:
+        s = subs[i]
+        status = s.get("ai_status") or "未執行"
+        notified_mark = "　✅已通知投稿者" if s.get("notified") else ""
+        return (
+            f"{s.get('year')}{s.get('season')}《{s.get('title') or '(無標題)'}》"
+            f"— {s.get('submitter_name','')}　｜校對：{status}{notified_mark}"
+        )
+
+    idx = st.selectbox("選擇要審稿的投稿", list(range(len(subs))), format_func=_label)
+    s = subs[idx]
+    uid = s.get("_dir") or f"sheet_{idx}_{s.get('submitted_at','')}"
+    original_text = s.get("content") or ""
+    ai_status = s.get("ai_status") or "未執行"
+
+    st.markdown(
+        f"**投稿人**：{s.get('submitter_name','')}　|　**Email**：{s.get('email','')}　|　"
+        f"**期別**：{s.get('year')} {s.get('season')}　|　**收稿**：{s.get('submitted_at','')}"
+    )
+
+    if ai_status != "已完成":
+        st.warning(f"AI 校對狀態：{ai_status}")
+        if st.button("🤖 立即執行 AI 校對", disabled=not proofreader.is_enabled(), key=f"run_ai_{uid}"):
+            with st.spinner("AI 校對中…"):
+                proof = proofreader.proofread(original_text, s.get("title", ""), s.get("category", ""))
+            if proof:
+                local_dir = Path(s["_dir"]) if s.get("_dir") else None
+                folder_url = run_ai_proofread_and_store(
+                    s.get("submitter_name", ""), s.get("title", ""), s, proof, local_dir=local_dir
+                )
+                if storage.is_enabled():
+                    storage.update_row(
+                        s.get("submitted_at", ""), s.get("submitter_name", ""), s.get("title", ""),
+                        {
+                            "AI校對狀態": "已完成",
+                            "AI校正後內文": proof["corrected_text"],
+                            "AI修訂對照表": json.dumps(proof["revisions"], ensure_ascii=False),
+                            "AI校正資料夾": folder_url,
+                        },
+                    )
+                st.success("AI 校對完成，請重新選取此篇查看對照結果。")
+                st.rerun()
+            else:
+                st.error("AI 校對失敗，請確認 Claude API 金鑰是否正確，或稍後再試。")
+        return
+
+    corrected_default = s.get("ai_corrected_content") or original_text
+    revisions = s.get("ai_revisions") or []
+    if s.get("ai_folder_url"):
+        st.markdown(f"📁 **[開啟這篇的 AI 校正 Drive 資料夾]({s['ai_folder_url']})**")
+
+    st.markdown("##### 📝 雙欄對照（左：原始稿／右：AI 校對稿，可直接修改右側再送出）")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text_area("原始內文", value=original_text, height=380, key=f"orig_{uid}", disabled=True)
+    with col2:
+        edited_key = f"edited_{uid}"
+        if edited_key not in st.session_state:
+            st.session_state[edited_key] = corrected_default
+        st.text_area("AI 校對後（可編輯確認）", height=380, key=edited_key)
+
+    if revisions:
+        st.markdown("##### 🔍 修訂對照表")
+        st.dataframe(
+            [
+                {"原句": r.get("original", ""), "修訂句": r.get("revised", ""), "修正理由": r.get("reason", "")}
+                for r in revisions
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.caption("本篇 AI 校對未發現需要修訂之處。")
+
+    if s.get("notified"):
+        st.success(f"✅ 已於 {s['notified']} 通知投稿者定稿")
+    btn_label = "📧 重新寄送定稿信給投稿者" if s.get("notified") else "📧 確認定稿並寄送給投稿者"
+    if st.button(btn_label, key=f"send_{uid}", disabled=not mailer.is_enabled()):
+        final_text = st.session_state[f"edited_{uid}"]
+        ok = mailer.send_to_submitter(
+            s.get("email", ""), s.get("submitter_name", ""), s.get("title", ""), final_text, revisions,
+        )
+        if ok:
+            notified_at = datetime.now().isoformat(timespec="seconds")
+            if storage.is_enabled():
+                storage.update_row(
+                    s.get("submitted_at", ""), s.get("submitter_name", ""), s.get("title", ""),
+                    {"AI校正後內文": final_text, "已通知投稿者": notified_at},
+                )
+            st.success(f"已寄送定稿信給 {s.get('email','')}")
+            st.rerun()
+        else:
+            st.error("寄送失敗，請確認投稿通知信（Gmail SMTP）設定。")
+    if not mailer.is_enabled():
+        st.caption("尚未設定投稿通知信（secrets 的 `[email]`），暫時無法寄送定稿信。")
+
+
 # --------------------------------------------------------------------------- #
 # 主程式
 # --------------------------------------------------------------------------- #
@@ -819,7 +999,11 @@ def main() -> None:
     render_admin_login()
 
     if st.session_state.get("is_admin"):
-        render_admin_panel()
+        tab_overview, tab_ai = st.tabs(["📋 投稿總覽", "🤖 AI 校對與審稿"])
+        with tab_overview:
+            render_admin_panel()
+        with tab_ai:
+            render_ai_review_panel()
     else:
         render_submission_form()
 

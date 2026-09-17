@@ -6,10 +6,11 @@
 | 對象 | 用途 |
 |---|---|
 | **投稿者**（橋友，免登入） | 填表單、貼／上傳文章、上傳多張照片＋圖說 |
-| **編輯**（帳密登入） | 依年份季別檢視所有投稿全文、圖說、下載原檔 |
+| **編輯**（帳密登入） | 依年份季別檢視所有投稿全文、圖說、下載原檔；審閱 AI 校對結果並定稿寄給投稿者 |
 
 送出的每一筆投稿會**同時**存到 4 個地方（見下方〈資料流向〉），
-編輯不必守著網站，投稿一進來就會收到 email。
+編輯不必守著網站，投稿一進來就會收到 email，也已在背景自動跑完一次 **AI 智慧校對**
+（模組二，投稿者不會看到這個過程）。
 
 ---
 
@@ -49,13 +50,19 @@
 
 1. 開同一個網址，左側欄點「🔐 編輯後台登入」。
 2. 輸入帳號密碼（設定在 secrets 的 `[app]`，見〈部署資訊〉）。
-3. 登入後：
-   - 左側欄會顯示 Google Drive／Sheets／通知信三個管道的連線狀態
-   - 主畫面「後台審稿管理總覽」：
-     - 上方可依 **年份** 與 **季別** 篩選
-     - 清單表格：投稿時間、投稿人、Email、標題、分類、照片數
-     - 點任一筆展開：**放大字級**的完整內文、每張照片圖說、
-       「開啟這篇投稿的 Google Drive 資料夾」連結、下載原始文檔／整包 ZIP
+3. 登入後畫面分兩個頁籤：
+
+   **📋 投稿總覽**
+   - 左側欄顯示 Google Drive／Sheets／通知信／AI 校對四個管道的連線狀態
+   - 上方可依 **年份** 與 **季別** 篩選；清單表格：投稿時間、投稿人、Email、標題、分類、照片數
+   - 點任一筆展開：**放大字級**的完整內文、每張照片圖說、
+     「開啟這篇投稿的 Google Drive 資料夾」連結、下載原始文檔／整包 ZIP
+
+   **🤖 AI 校對與審稿**（模組二）
+   - 下拉選單選一篇投稿，會標示該篇「校對：已完成 / 未執行 / 失敗」
+   - 已完成的：左欄原始稿、右欄 AI 校對稿（**可直接編輯**），下方是「原句／修訂句／修正理由」對照表
+   - 改到滿意後按「📧 確認定稿並寄送給投稿者」，系統會 email 修訂後全文＋對照表給投稿者
+   - 未執行 / 失敗的（例如投稿時 AI 校對還沒設定、或當次呼叫失敗）：按「🤖 立即執行 AI 校對」手動補跑
 4. 想拿**印刷級照片原檔** → 點該篇的 Drive 資料夾連結，或去收件信箱找那封投稿通知信的附件。
 
 ---
@@ -69,11 +76,17 @@
 |---|---|---|---|
 | 1 | **本機資料夾** `submissions/<年>_<季>/<時間>_<投稿者>/` | 無（一定會做） | `content.txt`、原始照片、原始文檔、`metadata.json` |
 | 2 | **Google Drive** 目標資料夾下的子資料夾 `投稿者姓名＿文章標題` | `[drive]` | `文章內文.txt`、原始照片、原始文檔、`metadata.json` |
-| 3 | **Google Sheets** 總表新增一列 | `[google]` + `[gcp_service_account]` | 時間／期別／投稿人／Email／標題／分類／全文／照片數／圖說／**該篇 Drive 連結** |
-| 4 | **Email** 給編輯部（可多位收件人） | `[email]` | 全文正文 ＋ 所有原始照片、文檔附件；回覆會回到投稿者 |
+| 3 | **Google Sheets** 總表新增一列 | `[google]` + `[gcp_service_account]` | 時間／期別／投稿人／Email／標題／分類／全文／照片數／圖說／**該篇 Drive 連結**／AI 校對狀態與結果 |
+| 4 | **Email** 給編輯部（可多位收件人） | `[email]` | 全文正文 ＋ 所有原始照片、文檔附件 ＋ AI 校對狀態；回覆會回到投稿者 |
+| 5 | **AI 智慧校對**（模組二）：Drive 子資料夾 `（AI校正）投稿者姓名＿文章標題`，與第 2 項同一個 Drive 資料夾下 | `[anthropic]` | `AI校對後內文.txt`、`AI修訂對照表.docx`、`metadata.json`；結果也寫回同一列 Google Sheets |
 
 > ⚠️ **部署到 Streamlit Cloud 時，第 1 項（本機）會在容器重啟後消失。**
 > 所以雲端版務必至少設定 `[drive]` 或 `[email]`，投稿檔案才會安全保存。
+>
+> 第 5 項（AI 校對）在投稿存檔完成後**立刻**於背景執行、對投稿者完全無感——
+> 前台不會顯示任何跟 AI 有關的文字，回條只會列出已完成的一般儲存管道。
+> 若 Claude API 未設定或當次呼叫失敗，投稿本身仍會正常完成，只是該篇的
+> 「AI校對狀態」會是「未執行」或「失敗」，編輯可在後台手動補跑。
 
 ---
 
@@ -87,10 +100,11 @@
 | GitHub | <https://github.com/lyf1228/bridge-submission-portal>（公開，branch `main`） |
 | 線上網址 | `https://<部署時取的名稱>.streamlit.app`（名稱不可含 `portal`） |
 | 後台帳號 | 設定在 Streamlit Cloud 的 Secrets `[app]` |
-| Google Drive 目標資料夾 | <https://drive.google.com/drive/folders/1EoO3z1L0lz6MgryLPeJby_GRPHMHvO-R> |
+| Google Drive 目標資料夾 | <https://drive.google.com/drive/folders/1EoO3z1L0lz6MgryLPeJby_GRPHMHvO-R>（原稿與 AI 校正稿同放這裡，用資料夾名稱區分） |
 | Google Sheets 總表 | 「中橋季刊投稿」（服務帳戶 `portal-bot@…` 已共用為編輯者） |
 | Apps Script 專案 | 「中橋季刊投稿－Drive 收檔」（script.google.com，執行身分＝擁有者） |
 | 投稿通知信收件人 | `lyf1228@gmail.com`、`shon.yang@gmail.com` |
+| AI 校對 | Claude API（Anthropic），金鑰設定在 `[anthropic]`，模型預設 `claude-sonnet-5` |
 
 ---
 
@@ -175,6 +189,23 @@ streamlit run app.py
    recipients = ["lyf1228@gmail.com", "shon.yang@gmail.com"]
    ```
 
+### 設定四：AI 智慧校對（Claude API，模組二）
+
+1. 到 <https://console.anthropic.com/settings/keys> 登入／註冊，建立一組 API 金鑰
+   （`sk-ant-...` 開頭；這是**開發者金鑰**，跟 claude.ai 網頁聊天的帳號無關，另外計費）
+2. 填 secrets：
+   ```toml
+   [anthropic]
+   api_key = "sk-ant-api03-...."
+   # model = "claude-sonnet-5"   # 選填，預設就是這個
+   ```
+3. 設定好之後，**新投稿送出時就會自動在背景校對一次**，不用做任何其他設定；
+   後台「🤖 AI 校對與審稿」頁籤可以審閱結果、編輯定稿、寄給投稿者。
+
+> 校對內容：錯別字、標點語法、語意潤飾，以及橋牌術語規範化（叫品、合約、
+> 莊家／防禦方、防禦信號等寫法統一）。不會更動原作者的語氣與觀點，也不會
+> 自行擴寫或大幅改寫段落結構。
+
 ### 部署到 Streamlit Community Cloud
 
 1. <https://share.streamlit.io> → GitHub 帳號登入 → **New app** → **從現有 repo 部署**
@@ -209,6 +240,9 @@ streamlit run app.py
 | 後台「Invalid format: please enter valid TOML」 | 貼到不完整或含說明文字（如「…中間很多行…」）→ 貼**完整**內容 |
 | 打開 Google 試算表顯示「無法開啟這個檔案」 | 瀏覽器登入的 Google 帳號不是擁有者 → 切換到擁有者帳號 |
 | 投稿回條只出現部分管道 | 該管道的 secrets 沒設定或設定錯 → 登入後台看左側欄狀態文字 |
+| 後台「AI 校對」頁籤顯示「尚未設定 Claude API 金鑰」 | secrets 沒有 `[anthropic]` 或 `api_key` 是空的／還是範本裡的假值 → 補上真正的金鑰 |
+| 某篇投稿「校對：未執行」或「校對：失敗」 | 該篇送出當下 AI 校對未設定或呼叫失敗（投稿本身不受影響）→ 在「AI 校對與審稿」選到那篇，按「🤖 立即執行 AI 校對」手動補跑 |
+| 舊試算表少了 AI 相關欄位 | 系統會在下次連線時自動把缺的欄位（AI校對狀態…）補到既有表頭後面，不用手動改表 |
 
 ---
 
@@ -216,10 +250,11 @@ streamlit run app.py
 
 ```
 bridge-submission-portal/
-├── app.py                        # 主程式：表單 + 後台 + 檔案解析 + 秋日紅楓 CSS
+├── app.py                        # 主程式：表單 + 後台（投稿總覽／AI校對）+ 檔案解析 + 秋日紅楓 CSS
 ├── storage.py                    # Google Sheets 後端（gspread）
 ├── gdrive.py                     # Google Drive 後端（POST 給 Apps Script）
-├── mailer.py                     # Gmail SMTP 投稿通知信
+├── mailer.py                     # Gmail SMTP：投稿通知信 + 定稿信寄給投稿者
+├── proofreader.py                # AI 智慧校對（Claude API）＋ 修訂對照表 docx 產生
 ├── apps_script.gs                # 要貼到 script.google.com 的 Drive 收檔程式
 ├── requirements.txt
 ├── README.md
@@ -244,3 +279,5 @@ bridge-submission-portal/
   到對應的 Google 頁面撤銷／重建即可，不影響你的個人帳號主體。
 - `TOKEN` 是 Apps Script 唯一的門禁（擋別人亂丟檔案到你 Drive），要換就 `.gs` 和 secrets 兩邊一起改並重新部署。
 - 原始碼本身不含任何機密：帳密只從 `st.secrets` 讀，未設定時後台無法登入。
+- Claude API 金鑰外洩：到 <https://console.anthropic.com/settings/keys> 刪除重建即可，
+  不影響其他帳號功能；每次校對都會消耗你自己的 API 額度（依用量計費）。

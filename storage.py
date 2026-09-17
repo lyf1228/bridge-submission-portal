@@ -13,6 +13,8 @@ Google Sheets 儲存後端
 
 from __future__ import annotations
 
+import json
+
 import streamlit as st
 
 # Google Sheet 的欄位標題（第一列）
@@ -31,6 +33,11 @@ SHEET_HEADERS = [
     "原始文檔",
     "Drive資料夾",
     "本機資料夾",
+    "AI校對狀態",
+    "AI校正後內文",
+    "AI修訂對照表",
+    "AI校正資料夾",
+    "已通知投稿者",
 ]
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -69,9 +76,28 @@ def _worksheet():
         raise RuntimeError("secrets[google] 需要 sheet_url 或 sheet_id")
 
     worksheet = spreadsheet.sheet1
-    if not worksheet.row_values(1):
+    existing = worksheet.row_values(1)
+    if not existing:
         worksheet.append_row(SHEET_HEADERS, value_input_option="USER_ENTERED")
+    elif existing != SHEET_HEADERS and existing == SHEET_HEADERS[: len(existing)]:
+        # 舊表（例如上線初期版本）缺少後來新增的欄位（如 AI 校對相關）—— 直接補在後面，
+        # 不動既有欄位與資料，向下相容舊列（缺的欄位讀取時自動視為空字串）。
+        missing = SHEET_HEADERS[len(existing) :]
+        start_col = len(existing) + 1
+        worksheet.update(
+            range_name=f"{_col_a1(start_col)}1:{_col_a1(start_col + len(missing) - 1)}1",
+            values=[missing],
+        )
     return worksheet
+
+
+def _col_a1(col: int) -> str:
+    """1-based 欄位編號轉 A1 表示法的欄位字母（1→A, 27→AA）。"""
+    letters = ""
+    while col > 0:
+        col, rem = divmod(col - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
 
 
 # --------------------------------------------------------------------------- #
@@ -136,12 +162,53 @@ def append_submission(meta: dict) -> bool:
                 meta.get("original_document", ""),
                 meta.get("drive_folder_url", ""),
                 meta.get("folder", ""),
+                meta.get("ai_status", ""),
+                meta.get("ai_corrected_content", ""),
+                json.dumps(meta.get("ai_revisions", []), ensure_ascii=False),
+                meta.get("ai_folder_url", ""),
+                meta.get("notified", ""),
             ],
             value_input_option="USER_ENTERED",
         )
         return True
     except Exception as exc:  # noqa: BLE001
         st.warning(f"寫入 Google Sheets 失敗（本機仍有完整備份）：{exc}")
+        return False
+
+
+def update_row(submitted_at: str, submitter_name: str, title: str, fields: dict) -> bool:
+    """
+    找到符合（投稿時間, 投稿人, 標題）的那一列，更新 `fields`（欄位名稱 -> 新值）。
+    用於：編輯者在「AI 校對與審稿」確認送出後，回寫最終定稿與通知狀態。
+    """
+    try:
+        worksheet = _worksheet()
+        values = worksheet.get_all_values()
+        if not values:
+            return False
+        header = values[0]
+        idx = {name: i for i, name in enumerate(header)}
+        needed = {"投稿時間", "投稿人", "文章標題"}
+        if not needed.issubset(idx):
+            return False
+        target_row = None
+        for r, row in enumerate(values[1:], start=2):
+            if (
+                row[idx["投稿時間"]] == submitted_at
+                and row[idx["投稿人"]] == submitter_name
+                and row[idx["文章標題"]] == title
+            ):
+                target_row = r
+                break
+        if target_row is None:
+            return False
+        for col_name, value in fields.items():
+            if col_name not in idx:
+                continue
+            worksheet.update_cell(target_row, idx[col_name] + 1, value)
+        return True
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"更新 Google Sheets 失敗：{exc}")
         return False
 
 
@@ -158,6 +225,14 @@ def _parse_photos_cell(text: str) -> list[dict]:
             line, fname = line[: line.rfind("[")], line[line.rfind("[") + 1 : -1]
         photos.append({"caption": line.strip("　 "), "filename": fname.strip()})
     return photos
+
+
+def _parse_revisions_cell(text: str) -> list[dict]:
+    try:
+        data = json.loads(text) if text else []
+        return data if isinstance(data, list) else []
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def read_submissions() -> list[dict]:
@@ -192,6 +267,11 @@ def read_submissions() -> list[dict]:
                 "original_document": str(r.get("原始文檔", "")),
                 "drive_folder_url": str(r.get("Drive資料夾", "")),
                 "folder": str(r.get("本機資料夾", "")),
+                "ai_status": str(r.get("AI校對狀態", "")),
+                "ai_corrected_content": str(r.get("AI校正後內文", "")),
+                "ai_revisions": _parse_revisions_cell(r.get("AI修訂對照表", "")),
+                "ai_folder_url": str(r.get("AI校正資料夾", "")),
+                "notified": str(r.get("已通知投稿者", "")),
                 "_source": "sheet",
             }
         )

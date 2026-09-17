@@ -59,6 +59,10 @@ def _body(meta: dict) -> str:
         f"  {i}. {p.get('caption') or '(未填圖說)'}　[{p.get('filename', '')}]"
         for i, p in enumerate(photos, start=1)
     ) or "  （無）"
+    ai_status = meta.get("ai_status") or "（未執行）"
+    ai_line = f"AI 校對　：{ai_status}"
+    if meta.get("ai_folder_url"):
+        ai_line += f"（{meta['ai_folder_url']}）"
     return (
         f"中橋季刊收到一筆新投稿\n"
         f"{'=' * 40}\n"
@@ -71,6 +75,7 @@ def _body(meta: dict) -> str:
         f"收稿時間：{meta.get('submitted_at')}\n"
         f"照片數　：{meta.get('photo_count')}\n"
         f"照片圖說：\n{photo_lines}\n"
+        f"{ai_line}\n"
         f"{'=' * 40}\n\n"
         f"【文章內文】\n\n{meta.get('content', '')}\n"
     )
@@ -106,11 +111,75 @@ def send_submission(meta: dict, attachments: list[dict]) -> bool:
             filename=att["filename"],
         )
 
+    return _send(c, msg, on_error="投稿通知信寄送失敗（投稿本身已存檔）")
+
+
+def _send(c: dict, msg: EmailMessage, on_error: str) -> bool:
     try:
         with smtplib.SMTP_SSL(_SMTP_HOST, _SMTP_PORT, timeout=30) as smtp:
             smtp.login(c["sender"], str(c["app_password"]).replace(" ", ""))
             smtp.send_message(msg)
         return True
     except Exception as exc:  # noqa: BLE001
-        st.warning(f"投稿通知信寄送失敗（投稿本身已存檔）：{exc}")
+        st.warning(f"{on_error}：{exc}")
         return False
+
+
+def _revision_table_text(revisions: list[dict]) -> str:
+    if not revisions:
+        return "（本次校對未發現需要修訂之處）"
+    lines = []
+    for i, r in enumerate(revisions, start=1):
+        lines.append(
+            f"{i}. 原句：{r.get('original', '')}\n"
+            f"   修訂：{r.get('revised', '')}\n"
+            f"   理由：{r.get('reason', '')}"
+        )
+    return "\n\n".join(lines)
+
+
+def send_to_submitter(
+    submitter_email: str,
+    submitter_name: str,
+    title: str,
+    final_text: str,
+    revisions: list[dict],
+    attachments: list[dict] | None = None,
+) -> bool:
+    """
+    編輯在「AI 校對與審稿」確認定稿後，寄給投稿者：修訂後全文 ＋ 修訂對照表。
+    這是編輯手動觸發的動作，失敗時用 st.warning 提示編輯（此函式只在後台呼叫）。
+    """
+    c = _conf()
+    if not c or not submitter_email:
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = f"[中橋季刊] 您的投稿《{title}》編輯校對完成"
+    msg["From"] = formataddr(("中橋季刊編輯部", c["sender"]))
+    msg["To"] = submitter_email
+    msg["Reply-To"] = c["sender"]
+
+    body = (
+        f"{submitter_name} 您好：\n\n"
+        f"感謝您投稿《{title}》，編輯部已完成校對，修訂後全文與修訂對照表如下，"
+        f"敬請確認內容無誤。如有疑問歡迎直接回覆本信。\n\n"
+        f"{'=' * 40}\n"
+        f"【修訂對照表】\n\n{_revision_table_text(revisions)}\n"
+        f"{'=' * 40}\n\n"
+        f"【修訂後全文】\n\n{final_text}\n\n"
+        f"祝橋藝精進\n"
+        f"中橋季刊編輯部"
+    )
+    msg.set_content(body)
+
+    for att in attachments or []:
+        maintype, _, subtype = (att.get("mime") or "application/octet-stream").partition("/")
+        msg.add_attachment(
+            att["data"],
+            maintype=maintype or "application",
+            subtype=subtype or "octet-stream",
+            filename=att["filename"],
+        )
+
+    return _send(c, msg, on_error="寄送定稿信失敗")
