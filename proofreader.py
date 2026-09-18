@@ -29,6 +29,13 @@ import streamlit as st
 
 log = logging.getLogger("bridge_portal.proofreader")
 
+_last_error = ""
+
+
+def last_error() -> str:
+    """回傳最近一次 proofread() 失敗的原因（給後台手動重跑時顯示除錯用）。"""
+    return _last_error
+
 _DEFAULT_MODEL = "claude-sonnet-5"
 _MAX_TOKENS = 8000
 
@@ -106,8 +113,15 @@ def proofread(content: str, title: str, category: str) -> dict | None:
     任何失敗（未設定金鑰、API 錯誤、JSON 解析失敗…）一律回傳 None，僅寫 log，
     絕不中斷或影響投稿流程。
     """
+    global _last_error
+    _last_error = ""
+
     conf = _conf()
-    if not conf or not (content or "").strip():
+    if not conf:
+        _last_error = "未設定 [anthropic] api_key"
+        return None
+    if not (content or "").strip():
+        _last_error = "內文為空"
         return None
 
     try:
@@ -131,6 +145,7 @@ def proofread(content: str, title: str, category: str) -> dict | None:
         )
         data = _extract_json(raw)
         if not data or "corrected_text" not in data:
+            _last_error = f"無法解析 Claude 回覆為 JSON（原始回覆前 200 字：{raw[:200]}）"
             log.warning("proofreader: 無法解析 Claude 回覆為 JSON，原始回覆前 300 字：%s", raw[:300])
             return None
 
@@ -151,6 +166,7 @@ def proofread(content: str, title: str, category: str) -> dict | None:
             "checked_at": datetime.now().isoformat(timespec="seconds"),
         }
     except Exception as exc:  # noqa: BLE001
+        _last_error = f"{type(exc).__name__}: {exc}"
         log.warning("proofreader: 校對失敗（%s）：%s", title, exc)
         return None
 

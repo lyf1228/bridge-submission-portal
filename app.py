@@ -935,7 +935,7 @@ def render_ai_review_panel() -> None:
                 st.success("AI 校對完成，請重新選取此篇查看對照結果。")
                 st.rerun()
             else:
-                st.error("AI 校對失敗，請確認 Claude API 金鑰是否正確，或稍後再試。")
+                st.error(f"AI 校對失敗：{proofreader.last_error() or '未知原因，請稍後再試'}")
         return
 
     corrected_default = s.get("ai_corrected_content") or original_text
