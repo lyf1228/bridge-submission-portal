@@ -86,8 +86,15 @@ CUSTOM_CSS = """
     background-color: var(--parchment);
     color: var(--walnut);
 }
-.stApp, .stApp p, .stApp label, .stApp span, .stApp div {
+.stApp, .stApp p, .stApp label,
+.stApp span:not([data-testid="stIconMaterial"]),
+.stApp div {
     font-family: "Noto Serif TC", "Songti TC", "Yu Mincho", "Georgia", serif;
+}
+/* Streamlit 的圖示（展開箭頭、側欄收合鍵…）用專屬圖示字型畫成小圖案，
+   上面那條全域字體規則會把它們變回純文字、跟旁邊標題重疊——這裡救回來。 */
+[data-testid="stIconMaterial"] {
+    font-family: "Material Symbols Rounded", sans-serif !important;
 }
 h1, h2, h3, h4 {
     color: var(--maple-red-2) !important;
