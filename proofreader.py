@@ -137,6 +137,7 @@ def proofread(content: str, title: str, category: str) -> dict | None:
         resp = client.messages.create(
             model=conf["model"],
             max_tokens=_MAX_TOKENS,
+            thinking={"type": "disabled"},
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
