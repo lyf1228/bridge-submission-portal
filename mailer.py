@@ -138,7 +138,7 @@ def _revision_table_text(revisions: list[dict]) -> str:
     return "\n\n".join(lines)
 
 
-def send_to_submitter(
+def send_final_review(
     submitter_email: str,
     submitter_name: str,
     title: str,
@@ -147,29 +147,28 @@ def send_to_submitter(
     attachments: list[dict] | None = None,
 ) -> bool:
     """
-    編輯在「AI 校對與審稿」確認定稿後，寄給投稿者：修訂後全文 ＋ 修訂對照表。
+    編輯在「AI 校對與審稿」確認定稿後，把定稿寄給**編輯部**（[email].recipients）存查／
+    做最後把關 —— 不會直接寄給投稿者本人（逐句列出修訂容易讓投稿者感覺被過度挑剔）。
     這是編輯手動觸發的動作，失敗時用 st.warning 提示編輯（此函式只在後台呼叫）。
     """
     c = _conf()
-    if not c or not submitter_email:
+    if not c:
         return False
 
     msg = EmailMessage()
-    msg["Subject"] = f"[中橋季刊] 您的投稿《{title}》編輯校對完成"
-    msg["From"] = formataddr(("中橋季刊編輯部", c["sender"]))
-    msg["To"] = submitter_email
-    msg["Reply-To"] = c["sender"]
+    msg["Subject"] = f"[中橋季刊·AI校對定稿] {title} · {submitter_name}"
+    msg["From"] = formataddr(("中橋季刊投稿系統", c["sender"]))
+    msg["To"] = ", ".join(c["recipients"])
+    if submitter_email:
+        msg["Reply-To"] = submitter_email
 
     body = (
-        f"{submitter_name} 您好：\n\n"
-        f"感謝您投稿《{title}》，編輯部已完成校對，修訂後全文與修訂對照表如下，"
-        f"敬請確認內容無誤。如有疑問歡迎直接回覆本信。\n\n"
+        f"《{title}》（投稿人：{submitter_name}　Email：{submitter_email or '未提供'}）\n"
+        f"AI 校對已由編輯確認定稿，內容如下，請自行決定是否／如何轉告投稿者。\n\n"
         f"{'=' * 40}\n"
         f"【修訂對照表】\n\n{_revision_table_text(revisions)}\n"
         f"{'=' * 40}\n\n"
-        f"【修訂後全文】\n\n{final_text}\n\n"
-        f"祝橋藝精進\n"
-        f"中橋季刊編輯部"
+        f"【定稿全文】\n\n{final_text}\n"
     )
     msg.set_content(body)
 

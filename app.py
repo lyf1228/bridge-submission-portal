@@ -888,7 +888,8 @@ def render_ai_review_panel() -> None:
     st.subheader("🤖 AI 校對與審稿")
     st.caption(
         "新投稿送出後，系統已在背景自動用 AI 校對一次（投稿者不會看到這個過程）。"
-        "這裡可以檢視校對結果、直接修改定稿，確認後一鍵寄給投稿者。"
+        "這裡可以檢視校對結果、直接修改定稿，確認後一鍵寄給編輯部存查"
+        "（不會直接寄給投稿者本人）。"
     )
     if not proofreader.is_enabled():
         st.info("尚未設定 Claude API 金鑰（secrets 的 `[anthropic]`），AI 校對功能目前關閉。")
@@ -974,11 +975,11 @@ def render_ai_review_panel() -> None:
         st.caption("本篇 AI 校對未發現需要修訂之處。")
 
     if s.get("notified"):
-        st.success(f"✅ 已於 {s['notified']} 通知投稿者定稿")
-    btn_label = "📧 重新寄送定稿信給投稿者" if s.get("notified") else "📧 確認定稿並寄送給投稿者"
+        st.success(f"✅ 已於 {s['notified']} 將定稿寄給編輯部存查")
+    btn_label = "📧 重新寄送定稿給編輯部" if s.get("notified") else "📧 確認定稿並寄給編輯部"
     if st.button(btn_label, key=f"send_{uid}", disabled=not mailer.is_enabled()):
         final_text = st.session_state[f"edited_{uid}"]
-        ok = mailer.send_to_submitter(
+        ok = mailer.send_final_review(
             s.get("email", ""), s.get("submitter_name", ""), s.get("title", ""), final_text, revisions,
         )
         if ok:
@@ -988,7 +989,7 @@ def render_ai_review_panel() -> None:
                     s.get("submitted_at", ""), s.get("submitter_name", ""), s.get("title", ""),
                     {"AI校正後內文": final_text, "已通知投稿者": notified_at},
                 )
-            st.success(f"已寄送定稿信給 {s.get('email','')}")
+            st.success("已將定稿寄給編輯部存查（不會寄給投稿者本人）")
             st.rerun()
         else:
             st.error("寄送失敗，請確認投稿通知信（Gmail SMTP）設定。")
